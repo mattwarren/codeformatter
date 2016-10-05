@@ -130,7 +130,8 @@ namespace Microsoft.DotNet.CodeFormatting
         public async Task FormatWorkspaceAsync(Workspace workspace, Project project, CancellationToken cancellationToken)
         {
             var overallTimer = Stopwatch.StartNew();
-            
+
+            var filesReformatted = 0;
             var orderedSyntaxRules = GetOrderedRules(_syntaxRules);
             var orderedLocalSemanticRules = GetOrderedRules(_localSemanticRules);
             foreach (var document in project.Documents)
@@ -168,20 +169,26 @@ namespace Microsoft.DotNet.CodeFormatting
 
                 // Seems like the Syntax/Semantic fixes don't always leave the code formatted correctly!!
                 var finalResults = Formatter.Format(syntaxRoot, workspace).ToFullString();
-                var modified = finalResults != originalContents;
-                if (modified)
+                timer.Stop();
+                if (finalResults != originalContents)
                 {
+                    filesReformatted++;
                     File.WriteAllText(document.FilePath, finalResults, sourceText.Encoding);
                     FormatLogger.WriteLine("    {0} was reformatted - {1:N2} msecs", fileName, timer.Elapsed.TotalMilliseconds);
                 }
                 else if (_verbose)
                 {
-                    FormatLogger.WriteLine("    {0} - {1:N2} msecs", fileName, timer.Elapsed.TotalMilliseconds);
+                    FormatLogger.WriteLine("    {0} was not changed - {1:N2} msecs", fileName, timer.Elapsed.TotalMilliseconds);
                 }
             }
 
             overallTimer.Stop();
-            FormatLogger.WriteLine("Total time {0} ({1:N2} msecs)", overallTimer.Elapsed, overallTimer.Elapsed.TotalMilliseconds);
+            
+            FormatLogger.WriteLine("Total time {0} ({1:N2} msecs), {2} file{3} were reformatted", 
+                                   overallTimer.Elapsed, 
+                                   overallTimer.Elapsed.TotalMilliseconds,
+                                   filesReformatted > 0 ? filesReformatted.ToString() : "NO", 
+                                   filesReformatted != 1 ? "s" : "");
         }
 
         public void ToggleRuleEnabled(IRuleMetadata ruleMetaData, bool enabled)

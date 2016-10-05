@@ -139,7 +139,7 @@ namespace CodeFormatter
 @"CodeFormatter [/file:<filename>] [/lang:<language>] [/c:<config>[,<config>...]>]
     [/copyright(+|-):[<file>]] [/tables] [/nounicode] 
     [/rule(+|-):rule1,rule2,...]  [/verbose]
-    <project, solution or response file>
+    <project, solution or response file> (can be .csproj, .sln or even project.json)
 
     /file           - Only apply changes to files with specified name
     /lang           - Specifies the language to use when a responsefile is
