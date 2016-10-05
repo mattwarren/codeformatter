@@ -9,9 +9,11 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.DotNet.CodeFormatting;
+using Microsoft.DotNet.ProjectModel;
+using Microsoft.DotNet.ProjectModel.Workspaces;
+using Project = Microsoft.CodeAnalysis.Project;
 
 namespace CodeFormatter
 {
@@ -35,7 +37,6 @@ namespace CodeFormatter
                     CommandLineParser.PrintUsage();
                     exitCode = 0;
                     break;
-
                 case Operation.ListRules:
                     RunListRules();
                     exitCode = 0;
@@ -47,7 +48,7 @@ namespace CodeFormatter
                     throw new Exception("Invalid enum value: " + options.Operation);
             }
 
-            return 0;
+            return exitCode;
         }
 
         private static void RunListRules()
@@ -130,6 +131,25 @@ namespace CodeFormatter
                     workspace.LoadMetadataForReferencedProjects = true;
                     var solution = await workspace.OpenSolutionAsync(item, cancellationToken);
                     await engine.FormatSolutionAsync(solution, cancellationToken);
+                }
+            }
+            else if (StringComparer.OrdinalIgnoreCase.Equals(extension, ".json"))
+            {               
+                Microsoft.DotNet.ProjectModel.Project project;
+                var currentDirectory = Directory.GetCurrentDirectory();
+                if (ProjectReader.TryGetProject(currentDirectory, out project))
+                {
+                    var projectName = Path.GetFileName(currentDirectory);
+                    Console.WriteLine("Successfully loaded: {0} ({1})", item, projectName);
+                    var workspace = new ProjectJsonWorkspace(item);
+
+                    // TODO make sure this is robust, want the first one with the correct name, i.e. "BenchmarkDotNet.Samples"
+                    var firstProject = workspace.CurrentSolution.Projects.First(p => p.Name.StartsWith(projectName));
+                    await engine.FormatWorkspaceAsync(workspace, firstProject, cancellationToken);
+                }
+                else
+                {
+                    Console.WriteLine("Failed to load: {0}", item);
                 }
             }
             else

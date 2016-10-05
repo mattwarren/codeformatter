@@ -9,13 +9,13 @@ using System.ComponentModel.Composition;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.Text;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Formatting;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Microsoft.DotNet.CodeFormatting
 {
@@ -125,6 +125,63 @@ namespace Microsoft.DotNet.CodeFormatting
         public Task FormatProjectAsync(Project project, CancellationToken cancellationToken)
         {
             return FormatAsync(project.Solution.Workspace, project.DocumentIds, cancellationToken);
+        }
+
+        public async Task FormatWorkspaceAsync(Workspace workspace, Project project, CancellationToken cancellationToken)
+        {
+            var overallTimer = Stopwatch.StartNew();
+            
+            var orderedSyntaxRules = GetOrderedRules(_syntaxRules);
+            var orderedLocalSemanticRules = GetOrderedRules(_localSemanticRules);
+            foreach (var document in project.Documents)
+            {
+                var timer = Stopwatch.StartNew();
+                var fileName = Path.GetFileName(document.FilePath);
+                SourceText sourceText;
+                using (var fsSource = new FileStream(document.FilePath, FileMode.Open, FileAccess.Read))
+                {
+                    sourceText = SourceText.From(fsSource);                    
+                }
+                
+                var syntaxTree = CSharpSyntaxTree.ParseText(sourceText, CSharpParseOptions.Default, document.FilePath, cancellationToken);
+                var syntaxRoot = await syntaxTree.GetRootAsync(cancellationToken);
+                var originalContents = syntaxRoot.ToFullString();
+
+                // Run the Syntax Formatting rules
+                var syntaxRootAfterSyntaxChange = syntaxRoot;
+                foreach (var rule in orderedSyntaxRules)
+                {
+                    if (rule.SupportsLanguage(document.Project.Language))
+                    {
+                        syntaxRootAfterSyntaxChange = rule.Process(syntaxRootAfterSyntaxChange, document.Project.Language);
+                    }
+                }                
+                syntaxRoot = syntaxRootAfterSyntaxChange;
+
+                // Run the Semantic Formatting rules
+                var syntaxRootAfterSemanticChanges = syntaxRoot;
+                foreach (var localSemanticRule in orderedLocalSemanticRules)
+                {
+                    syntaxRootAfterSemanticChanges = await localSemanticRule.ProcessAsync(document, syntaxRootAfterSemanticChanges, cancellationToken);
+                }
+                syntaxRoot = syntaxRootAfterSemanticChanges;
+
+                // Seems like the Syntax/Semantic fixes don't always leave the code formatted correctly!!
+                var finalResults = Formatter.Format(syntaxRoot, workspace).ToFullString();
+                var modified = finalResults != originalContents;
+                if (modified)
+                {
+                    File.WriteAllText(document.FilePath, finalResults, sourceText.Encoding);
+                    FormatLogger.WriteLine("    {0} was reformatted - {1:N2} msecs", fileName, timer.Elapsed.TotalMilliseconds);
+                }
+                else if (_verbose)
+                {
+                    FormatLogger.WriteLine("    {0} - {1:N2} msecs", fileName, timer.Elapsed.TotalMilliseconds);
+                }
+            }
+
+            overallTimer.Stop();
+            FormatLogger.WriteLine("Total time {0} ({1:N2} msecs)", overallTimer.Elapsed, overallTimer.Elapsed.TotalMilliseconds);
         }
 
         public void ToggleRuleEnabled(IRuleMetadata ruleMetaData, bool enabled)

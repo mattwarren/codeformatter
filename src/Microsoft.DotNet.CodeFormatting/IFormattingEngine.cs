@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
-using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -22,5 +21,6 @@ namespace Microsoft.DotNet.CodeFormatting
         void ToggleRuleEnabled(IRuleMetadata ruleMetaData, bool enabled);
         Task FormatSolutionAsync(Solution solution, CancellationToken cancellationToken);
         Task FormatProjectAsync(Project project, CancellationToken cancellationToken);
+        Task FormatWorkspaceAsync(Workspace workspace, Project project, CancellationToken cancellationToken);
     }
 }
